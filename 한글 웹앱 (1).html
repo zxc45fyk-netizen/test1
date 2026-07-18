@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>먹길 — 한글 따라쓰기</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;700;900&family=Gowun+Batang&display=swap" rel="stylesheet">
+<style>
+*{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+:root{
+  --paper:#F7F3EA; --paper-deep:#EFE9DB;
+  --ink:#2B2A28; --ink-soft:#5b574e;
+  --guide-line:#ddd5bf; --red:#B7472A; --gold:#a98344;
+}
+html,body{ width:100%; background:var(--paper); font-family:sans-serif; color:var(--ink); }
+body{
+  min-height:100vh; display:flex; flex-direction:column; align-items:center;
+  background-image:
+    radial-gradient(circle at 15% 20%,rgba(169,131,68,.05),transparent 40%),
+    radial-gradient(circle at 85% 80%,rgba(183,71,42,.04),transparent 45%);
+}
+
+/* HEADER */
+header{ width:100%; max-width:700px; padding:24px 20px 10px; text-align:center; }
+.eyebrow{ font-family:'Gowun Batang',serif; font-size:11px; letter-spacing:.35em; color:var(--gold); margin-bottom:4px; }
+h1{ font-family:'Noto Serif KR',serif; font-weight:900; font-size:28px; color:var(--ink); }
+h1 span{ color:var(--red); }
+.sub{ margin-top:4px; font-size:12px; color:var(--ink-soft); font-family:'Gowun Batang',serif; }
+
+/* MODE BAR */
+.mode-bar{ display:flex; gap:8px; margin:14px 0 4px; flex-wrap:wrap; justify-content:center; padding:0 16px; }
+.mode-btn{
+  font-size:13px; font-weight:600; padding:7px 15px; border-radius:999px;
+  border:1.5px solid var(--guide-line); background:transparent; color:var(--ink-soft); cursor:pointer; transition:all .15s;
+}
+.mode-btn.active{ background:var(--ink); border-color:var(--ink); color:var(--paper); }
+
+/* MAIN */
+main{ width:100%; max-width:460px; padding:14px 16px 10px; display:flex; flex-direction:column; align-items:center; }
+
+/* 글자 네비 */
+.char-nav{ display:flex; align-items:center; justify-content:center; gap:14px; width:100%; margin-bottom:12px; }
+.nav-btn{
+  width:36px; height:36px; border-radius:50%; border:1.5px solid var(--guide-line);
+  background:var(--paper); color:var(--ink); font-size:16px;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;
+}
+.char-info{ text-align:center; min-width:80px; }
+.char-info b{ font-family:'Noto Serif KR',serif; font-size:20px; display:block; }
+.char-info span{ font-size:12px; color:var(--ink-soft); }
+
+/* 포켓몬 그림 카드 */
+#pokeSpriteBox{
+  display:none; width:100%; margin-bottom:10px;
+  background:var(--paper-deep); border-radius:14px; border:1.5px solid var(--guide-line);
+  align-items:center; justify-content:center; padding:12px;
+}
+#pokeSprite{ width:180px; height:180px; object-fit:contain; display:block; }
+
+/* 상태 메시지 */
+#pokeStatus{ font-size:11px; color:var(--ink-soft); text-align:center; margin-bottom:8px; font-family:'Gowun Batang',serif; min-height:14px; }
+
+/* STAGE - 핵심: position:relative + 고정 크기 */
+.stage-wrap{ width:100%; position:relative; --ratio:100%; }
+.stage-wrap::before{ content:''; display:block; padding-top:var(--ratio); } /* 글자 수에 따라 동적 비율 */
+#stage{
+  position:absolute; inset:0;
+  background:
+    linear-gradient(var(--paper-deep) 1px,transparent 1px) 0 0/100% 50%,
+    linear-gradient(90deg,var(--paper-deep) 1px,transparent 1px) 0 0/50% 100%,
+    var(--paper);
+  border:2px solid var(--ink); border-radius:4px;
+  overflow:hidden; /* 캔버스 내용이 절대로 밖으로 못 나감 */
+  touch-action:none;
+}
+/* 금장 모서리 */
+#stage::before{ content:''; position:absolute; top:6px; left:6px; width:14px; height:14px; border-top:2px solid var(--gold); border-left:2px solid var(--gold); opacity:.5; pointer-events:none; z-index:3; }
+#stage::after{  content:''; position:absolute; bottom:6px; right:6px; width:14px; height:14px; border-bottom:2px solid var(--gold); border-right:2px solid var(--gold); opacity:.5; pointer-events:none; z-index:3; }
+
+#guideCanvas,#drawCanvas{
+  position:absolute; top:0; left:0;
+  width:100%; height:100%; /* CSS 표시 크기 = stage 크기 */
+}
+#guideCanvas{ z-index:1; }
+#drawCanvas{  z-index:2; cursor:crosshair; }
+
+/* 도장 */
+.stamp{
+  position:absolute; top:50%; left:50%; width:62%; aspect-ratio:1/1;
+  border:5px solid var(--red); border-radius:10px;
+  transform:translate(-50%,-50%) rotate(-12deg) scale(.5);
+  display:flex; align-items:center; justify-content:center; flex-direction:column;
+  color:var(--red); font-family:'Noto Serif KR',serif; font-weight:900;
+  opacity:0; pointer-events:none; z-index:5; mix-blend-mode:multiply;
+}
+.stamp .pct{ font-size:17%; line-height:1; }
+.stamp .pct sup{ font-size:46%; margin-left:2px; }
+.stamp .label{ font-family:'Gowun Batang',serif; font-size:8%; letter-spacing:.15em; margin-top:6%; }
+.stamp.show{ animation:stampDown .42s cubic-bezier(.2,1.4,.4,1) forwards; }
+@keyframes stampDown{
+  0%  { opacity:0; transform:translate(-50%,-50%) rotate(-12deg) scale(2.2); }
+  55% { opacity:1; transform:translate(-50%,-50%) rotate(-12deg) scale(.92); }
+  75% { transform:translate(-50%,-50%) rotate(-12deg) scale(1.04); }
+  100%{ opacity:1; transform:translate(-50%,-50%) rotate(-12deg) scale(1); }
+}
+
+/* 가이드 슬라이더 */
+.opacity-row{ display:flex; align-items:center; gap:10px; width:100%; margin-top:12px; font-size:12px; color:var(--ink-soft); }
+.opacity-row input{ flex:1; accent-color:var(--red); }
+
+/* 버튼 */
+.actions{ display:flex; gap:10px; width:100%; margin-top:14px; }
+.btn{ flex:1; padding:13px 0; border-radius:10px; font-weight:700; font-size:14px; border:none; cursor:pointer; }
+.btn-clear{ background:var(--paper); border:1.5px solid var(--guide-line); color:var(--ink-soft); }
+.btn-check{ background:var(--ink); color:var(--paper); }
+.btn-check:disabled{ opacity:.35; cursor:not-allowed; }
+
+/* 결과 패널 */
+.result-panel{ width:100%; margin-top:14px; padding:14px 16px; background:rgba(255,255,255,.5); border:1px solid var(--guide-line); border-radius:12px; display:none; }
+.result-panel.show{ display:block; animation:fadeUp .3s ease; }
+@keyframes fadeUp{ from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.result-row{ display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--ink-soft); padding:4px 0; }
+.result-row b{ color:var(--ink); font-family:'Noto Serif KR',serif; }
+.result-comment{ margin-top:8px; padding-top:8px; border-top:1px dashed var(--guide-line); font-family:'Gowun Batang',serif; font-size:13px; color:var(--ink); line-height:1.5; }
+
+footer{ margin:28px 0 20px; font-size:11px; color:var(--guide-line); font-family:'Gowun Batang',serif; }
+
+/* 직접입력 모달 */
+#customModal{ display:none; position:fixed; inset:0; background:rgba(43,42,40,.45); z-index:50; align-items:center; justify-content:center; padding:20px; }
+#customModal.open{ display:flex; }
+.modal-box{ background:var(--paper); border-radius:14px; padding:22px; width:100%; max-width:320px; }
+.modal-box h3{ font-family:'Noto Serif KR',serif; font-size:16px; font-weight:700; margin-bottom:12px; }
+.modal-box input{ width:100%; padding:12px; border-radius:8px; border:1.5px solid var(--guide-line); font-size:18px; font-family:'Noto Serif KR',serif; text-align:center; background:white; }
+.modal-actions{ display:flex; gap:8px; margin-top:12px; }
+/* ===== 포켓몬 도감 사이드바 ===== */
+#dexToggle{
+  position:fixed; top:20px; right:16px; z-index:40;
+  width:46px; height:46px; border-radius:50%;
+  background:var(--ink); color:var(--paper);
+  border:none; font-size:20px; cursor:pointer;
+  display:none; align-items:center; justify-content:center;
+  box-shadow:0 4px 14px rgba(43,42,40,.25);
+}
+#dexToggle.visible{ display:flex; }
+#dexBadge{
+  position:absolute; top:-4px; right:-4px;
+  min-width:18px; height:18px; padding:0 4px; border-radius:9px;
+  background:var(--red); color:#fff; font-size:10px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+  border:2px solid var(--paper);
+}
+#dexBadge.hidden{ display:none; }
+
+#dexOverlay{
+  position:fixed; inset:0; background:rgba(43,42,40,.35);
+  z-index:44; display:none;
+}
+#dexOverlay.open{ display:block; }
+
+#dexPanel{
+  position:fixed; top:0; right:0; height:100%; width:280px; max-width:82vw;
+  background:var(--paper); border-left:2px solid var(--ink);
+  z-index:45; box-shadow:-8px 0 24px rgba(0,0,0,.15);
+  transform:translateX(100%); transition:transform .28s ease;
+  display:flex; flex-direction:column;
+}
+#dexPanel.open{ transform:translateX(0); }
+.dex-header{
+  padding:18px 16px 12px; border-bottom:1.5px solid var(--guide-line);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.dex-header h2{ font-family:'Noto Serif KR',serif; font-size:17px; font-weight:900; }
+.dex-header span{ font-size:11px; color:var(--ink-soft); font-family:'Gowun Batang',serif; }
+.dex-close{ width:30px; height:30px; border-radius:50%; border:1.5px solid var(--guide-line); background:var(--paper); font-size:14px; cursor:pointer; }
+.dex-list{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.dex-empty{ text-align:center; color:var(--ink-soft); font-size:12px; font-family:'Gowun Batang',serif; margin-top:30px; line-height:1.6; }
+.dex-card{
+  background:var(--paper-deep); border:1.5px solid var(--guide-line); border-radius:12px;
+  padding:10px; display:flex; gap:10px; align-items:center;
+  animation:dexIn .35s ease;
+  cursor:pointer; transition:transform .12s ease, background .12s ease;
+}
+.dex-card:active{ transform:scale(0.97); background:var(--paper); }
+@keyframes dexIn{ from{opacity:0; transform:translateX(16px);} to{opacity:1; transform:translateX(0);} }
+.dex-card img{ width:44px; height:44px; object-fit:contain; flex-shrink:0; }
+.dex-card .dex-writing{
+  width:44px; height:44px; flex-shrink:0; background:var(--paper);
+  border:1px solid var(--guide-line); border-radius:6px; overflow:hidden;
+}
+.dex-card .dex-writing img{ width:100%; height:100%; object-fit:contain; }
+.dex-card .dex-info{ flex:1; min-width:0; }
+.dex-card .dex-name{ font-family:'Noto Serif KR',serif; font-weight:700; font-size:13px; }
+.dex-card .dex-score{ font-size:11px; color:var(--red); font-weight:700; margin-top:2px; }
+
+/* 포획 토스트 */
+#catchToast{
+  position:fixed; left:50%; top:16px; transform:translate(-50%,-60px);
+  background:var(--ink); color:var(--paper); padding:10px 20px; border-radius:999px;
+  font-size:13px; font-weight:700; z-index:60; opacity:0;
+  transition:transform .35s cubic-bezier(.2,1.4,.4,1), opacity .35s ease;
+  display:flex; align-items:center; gap:6px;
+}
+#catchToast.show{ transform:translate(-50%,0); opacity:1; }
+
+/* 도감 카드 확대 모달 */
+#dexZoomOverlay{
+  position:fixed; inset:0; background:rgba(43,42,40,.55);
+  z-index:70; display:none; align-items:center; justify-content:center; padding:24px;
+}
+#dexZoomOverlay.open{ display:flex; }
+.dex-zoom-box{
+  background:var(--paper); border-radius:18px; padding:22px;
+  width:100%; max-width:340px; text-align:center;
+  animation:zoomIn .25s cubic-bezier(.2,1.3,.4,1);
+  position:relative;
+}
+@keyframes zoomIn{ from{opacity:0; transform:scale(.85);} to{opacity:1; transform:scale(1);} }
+.dex-zoom-close{
+  position:absolute; top:12px; right:12px;
+  width:32px; height:32px; border-radius:50%; border:1.5px solid var(--guide-line);
+  background:var(--paper); font-size:15px; cursor:pointer;
+}
+.dex-zoom-sprite{ width:150px; height:150px; object-fit:contain; margin:6px auto 4px; display:block; }
+.dex-zoom-name{ font-family:'Noto Serif KR',serif; font-weight:900; font-size:20px; margin-top:4px; }
+.dex-zoom-score{ font-size:13px; color:var(--red); font-weight:700; margin-top:2px; }
+.dex-zoom-divider{ border:none; border-top:1px dashed var(--guide-line); margin:16px 0; }
+.dex-zoom-label{ font-family:'Gowun Batang',serif; font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+.dex-zoom-writing{
+  width:100%; aspect-ratio:1/1; max-width:220px; margin:0 auto;
+  background:var(--paper-deep); border:1.5px solid var(--guide-line); border-radius:12px;
+  overflow:hidden; display:flex; align-items:center; justify-content:center;
+}
+.dex-zoom-writing img{ width:100%; height:100%; object-fit:contain; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">HANDWRITING · 필사 연습</div>
+  <h1>먹<span>길</span></h1>
+  <div class="sub">한 획 한 획, 정성을 다해 따라 써보세요</div>
+</header>
+
+<div class="mode-bar" id="modeBar">
+  <button class="mode-btn active" data-mode="jamo">자모</button>
+  <button class="mode-btn" data-mode="syllable">글자</button>
+  <button class="mode-btn" data-mode="word">단어</button>
+  <button class="mode-btn" data-mode="pokemon">포켓몬</button>
+  <button class="mode-btn" data-mode="custom">직접입력</button>
+</div>
+
+<main>
+  <div class="char-nav">
+    <button class="nav-btn" id="prevBtn">‹</button>
+    <div class="char-info"><b id="charBig">ㄱ</b><span id="charName">기역</span></div>
+    <button class="nav-btn" id="nextBtn">›</button>
+  </div>
+
+  <div id="pokeStatus"></div>
+
+  <!-- 포켓몬 그림 (포켓몬 모드일 때만 표시) -->
+  <div id="pokeSpriteBox">
+    <img id="pokeSprite" src="" alt="">
+  </div>
+
+  <!-- 핵심: stage-wrap이 비율을 잡고, stage가 absolute로 꽉 채움 -->
+  <div class="stage-wrap" id="stageWrap">
+    <div id="stage">
+      <canvas id="guideCanvas"></canvas>
+      <canvas id="drawCanvas"></canvas>
+      <div class="stamp" id="stamp">
+        <div class="pct" id="stampPct">00<sup>%</sup></div>
+        <div class="label" id="stampLabel">합격</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="opacity-row">
+    <span>가이드 진하기</span>
+    <input type="range" id="guideOpacity" min="5" max="50" value="22">
+    <button id="soundToggle" title="쓰는 소리 켜기/끄기" style="flex-shrink:0; width:34px; height:34px; border-radius:50%; border:1.5px solid var(--guide-line); background:var(--paper); font-size:15px; cursor:pointer; display:flex; align-items:center; justify-content:center;">🔊</button>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-clear" id="clearBtn">다시 쓰기</button>
+    <button class="btn btn-check" id="checkBtn" disabled>정확도 측정</button>
+  </div>
+
+  <div class="result-panel" id="resultPanel">
+    <div class="result-row"><span>종합 정확도</span><b id="resIoU">—</b></div>
+    <div class="result-row"><span>가이드 따라간 정도</span><b id="resCoverage">—</b></div>
+    <div class="result-row"><span>가이드 밖 벗어난 정도</span><b id="resOverflow">—</b></div>
+    <div class="result-comment" id="resComment">먼저 글자를 따라 써보세요.</div>
+  </div>
+</main>
+
+<footer>먹길 · 펜으로 쓰는 한글 연습장</footer>
+
+<!-- 직접입력 모달 -->
+<div id="customModal">
+  <div class="modal-box">
+    <h3>연습할 글자 입력</h3>
+    <input id="customInput" maxlength="8" placeholder="예: 사랑해">
+    <div class="modal-actions">
+      <button class="btn btn-clear" id="customCancel" style="margin:0">취소</button>
+      <button class="btn btn-check" id="customOk" style="margin:0">적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- 포켓몬 도감 토글 버튼 -->
+<button id="dexToggle" title="포켓몬 도감">
+  📖
+  <span id="dexBadge" class="hidden">0</span>
+</button>
+
+<!-- 도감 사이드바 -->
+<div id="dexOverlay"></div>
+<div id="dexPanel">
+  <div class="dex-header">
+    <div>
+      <h2>포켓몬 도감</h2>
+      <span>정확도 90% 이상이면 포획!</span>
+    </div>
+    <div style="display:flex; gap:6px;">
+      <button class="dex-close" id="dexLoadBtn" title="전체 기록 불러오기">☁️</button>
+      <button class="dex-close" id="dexSheetBtn" title="구글 시트 연동">⚙️</button>
+      <button class="dex-close" id="dexClose">✕</button>
+    </div>
+  </div>
+  <div id="sheetStatus" style="padding:8px 16px 0; font-size:11px; color:var(--ink-soft); font-family:'Gowun Batang',serif; display:none;"></div>
+  <div class="dex-list" id="dexList">
+    <div class="dex-empty" id="dexEmpty">아직 포획한 포켓몬이 없어요.<br>포켓몬 모드에서 정확도 90% 이상을<br>달성하면 여기에 저장돼요!</div>
+  </div>
+</div>
+
+<!-- 포획 토스트 -->
+<div id="catchToast">🎉 <span id="catchToastText">포켓몬을 잡았다!</span></div>
+
+<!-- 도감 카드 확대 모달 -->
+<div id="dexZoomOverlay">
+  <div class="dex-zoom-box">
+    <button class="dex-zoom-close" id="dexZoomClose">✕</button>
+    <img class="dex-zoom-sprite" id="dexZoomSprite" src="" alt="">
+    <div class="dex-zoom-name" id="dexZoomName"></div>
+    <div class="dex-zoom-score" id="dexZoomScore"></div>
+    <hr class="dex-zoom-divider">
+    <div class="dex-zoom-label">내가 쓴 글씨</div>
+    <div class="dex-zoom-writing"><img id="dexZoomWriting" src="" alt="내가 쓴 글씨"></div>
+  </div>
+</div>
+
+<!-- 구글 시트 연동 설정 모달 -->
+<div id="sheetModal" style="display:none; position:fixed; inset:0; background:rgba(43,42,40,.45); z-index:80; align-items:center; justify-content:center; padding:20px;">
+  <div class="modal-box" style="max-width:340px; text-align:left;">
+    <h3>구글 시트 연동</h3>
+    <p style="font-size:12px; color:var(--ink-soft); line-height:1.6; margin-bottom:12px; font-family:'Gowun Batang',serif;">
+      구글 시트 Apps Script "웹 앱" 배포 URL을 붙여넣으면, 포켓몬을 잡을 때마다 이름·점수·손글씨가 자동으로 시트에 기록돼요.
+    </p>
+    <input id="sheetUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="width:100%; padding:11px; border-radius:8px; border:1.5px solid var(--guide-line); font-size:13px; background:white;">
+    <div class="modal-actions">
+      <button class="btn btn-clear" id="sheetCancel" style="margin:0">닫기</button>
+      <button class="btn btn-check" id="sheetSave" style="margin:0">저장</button>
+    </div>
+    <button id="sheetSyncAll" style="width:100%; margin-top:8px; padding:10px; border-radius:8px; border:1.5px solid var(--guide-line); background:transparent; color:var(--ink-soft); font-size:12px; cursor:pointer;">현재 도감 전체 다시 전송</button>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ===== 데이터 ===== */
+const JAMO = [
+  {ch:'ㄱ',name:'기역'},{ch:'ㄴ',name:'니은'},{ch:'ㄷ',name:'디귿'},{ch:'ㄹ',name:'리을'},
+  {ch:'ㅁ',name:'미음'},{ch:'ㅂ',name:'비읍'},{ch:'ㅅ',name:'시옷'},{ch:'ㅇ',name:'이응'},
+  {ch:'ㅈ',name:'지읒'},{ch:'ㅊ',name:'치읓'},{ch:'ㅋ',name:'키읔'},{ch:'ㅌ',name:'티읕'},
+  {ch:'ㅍ',name:'피읖'},{ch:'ㅎ',name:'히읗'},
+  {ch:'ㅏ',name:'아'},{ch:'ㅑ',name:'야'},{ch:'ㅓ',name:'어'},{ch:'ㅕ',name:'여'},
+  {ch:'ㅗ',name:'오'},{ch:'ㅛ',name:'요'},{ch:'ㅜ',name:'우'},{ch:'ㅠ',name:'유'},
+  {ch:'ㅡ',name:'으'},{ch:'ㅣ',name:'이'}
+];
+const SYLLABLE = [
+  {ch:'가',name:'가'},{ch:'나',name:'나'},{ch:'다',name:'다'},{ch:'라',name:'라'},
+  {ch:'마',name:'마'},{ch:'바',name:'바'},{ch:'사',name:'사'},{ch:'아',name:'아'},
+  {ch:'자',name:'자'},{ch:'차',name:'차'},{ch:'카',name:'카'},{ch:'타',name:'타'},
+  {ch:'파',name:'파'},{ch:'하',name:'하'},{ch:'강',name:'강'},{ch:'산',name:'산'},
+  {ch:'꿈',name:'꿈'},{ch:'빛',name:'빛'}
+];
+const WORD = [
+  {ch:'사랑',name:'사랑'},{ch:'가족',name:'가족'},{ch:'친구',name:'친구'},{ch:'희망',name:'희망'},
+  {ch:'바다',name:'바다'},{ch:'하늘',name:'하늘'},{ch:'행복',name:'행복'},
+  {ch:'고맙습니다',name:'고맙습니다'},{ch:'안녕하세요',name:'안녕하세요'}
+];
+const POKE_IDS = [1,4,7,25,39,52,54,58,63,69,74,79,81,90,92,100,102,104,109,111,113,116,120,122,123,125,129,131,133,143];
+
+/* ===== 상태 ===== */
+let mode = 'jamo';
+let list = JAMO;
+let idx  = 0;
+let pokeList = null;
+let strokes  = [];
+let drawing  = false;
+let curStroke = null;
+let hasDrawn  = false;
+
+/* ===== DOM ===== */
+const modeBar     = document.getElementById('modeBar');
+const prevBtn     = document.getElementById('prevBtn');
+const nextBtn     = document.getElementById('nextBtn');
+const charBig     = document.getElementById('charBig');
+const charName    = document.getElementById('charName');
+const pokeStatus  = document.getElementById('pokeStatus');
+const pokeSpriteBox = document.getElementById('pokeSpriteBox');
+const pokeSprite  = document.getElementById('pokeSprite');
+const stageWrap   = document.getElementById('stageWrap');
+const stage       = document.getElementById('stage');
+const guideCanvas = document.getElementById('guideCanvas');
+const drawCanvas  = document.getElementById('drawCanvas');
+const stamp       = document.getElementById('stamp');
+const checkBtn    = document.getElementById('checkBtn');
+const clearBtn    = document.getElementById('clearBtn');
+const resultPanel = document.getElementById('resultPanel');
+const guideSlider = document.getElementById('guideOpacity');
+const customModal = document.getElementById('customModal');
+const customInput = document.getElementById('customInput');
+const dexToggle   = document.getElementById('dexToggle');
+const dexBadge    = document.getElementById('dexBadge');
+const dexOverlay  = document.getElementById('dexOverlay');
+const dexPanel    = document.getElementById('dexPanel');
+const dexClose    = document.getElementById('dexClose');
+const dexList     = document.getElementById('dexList');
+const dexEmpty    = document.getElementById('dexEmpty');
+const catchToast  = document.getElementById('catchToast');
+const catchToastText = document.getElementById('catchToastText');
+
+let dex = []; // 포획한 포켓몬 목록 (세션 동안 유지)
+
+const gctx = guideCanvas.getContext('2d', {willReadFrequently:true});
+const dctx = drawCanvas.getContext('2d',  {willReadFrequently:true});
+const dpr  = Math.min(window.devicePixelRatio || 1, 3);
+
+/* ===== 캔버스 리사이즈 =====
+   stage는 position:absolute, inset:0 → stageWrap의 padding-top:100% 덕에 정사각형.
+   getBoundingClientRect()로 실제 픽셀 크기를 읽어서 캔버스에 적용. */
+function resize(){
+  const r = stage.getBoundingClientRect();
+  const w = Math.round(r.width);
+  const h = Math.round(r.height);
+  [guideCanvas, drawCanvas].forEach(c=>{
+    c.width  = w * dpr;
+    c.height = h * dpr;
+    // CSS width/height는 건드리지 않음 — CSS가 이미 100%로 stage에 꽉 채움
+  });
+  gctx.setTransform(dpr,0,0,dpr,0,0);
+  dctx.setTransform(dpr,0,0,dpr,0,0);
+  drawGuide();
+  redrawStrokes();
+}
+
+/* ===== 가이드 글자 그리기 ===== */
+function drawGuide(){
+  const W = guideCanvas.width  / dpr;
+  const H = guideCanvas.height / dpr;
+  gctx.clearRect(0,0,W,H);
+  const text = charBig.textContent;
+  if(!text || text==='…') return;
+
+  const op = guideSlider.value / 100;
+  const chars = [...text];
+  const len = chars.length;
+
+  gctx.save();
+  gctx.globalAlpha = op;
+  gctx.fillStyle   = '#2B2A28';
+  gctx.textAlign   = 'center';
+  gctx.textBaseline= 'middle';
+
+  if(len === 1){
+    const fs = Math.min(W,H) * 0.70;
+    gctx.font = `400 ${fs}px 'Noto Serif KR',serif`;
+    gctx.fillText(text, W/2, H/2);
+  } else {
+    // 2글자 이상은 항상 한 줄로, 캔버스 너비에 맞춰 폰트 크기 계산
+    const pad = W * 0.06; // 좌우 여백
+    const usable = W - pad*2;
+    let fs = Math.min(H*0.62, usable / len * 1.35);
+    gctx.font = `400 ${fs}px 'Noto Serif KR',serif`;
+    // 실측 후 넘치면 축소
+    let totalWidth = gctx.measureText(text).width + (len-1) * fs * 0.08;
+    if(totalWidth > usable){
+      fs *= usable / totalWidth;
+      gctx.font = `400 ${fs}px 'Noto Serif KR',serif`;
+      totalWidth = gctx.measureText(text).width + (len-1) * fs * 0.08;
+    }
+    const gap = fs * 0.08;
+    let x = W/2 - totalWidth/2;
+    chars.forEach(c=>{
+      const cw = gctx.measureText(c).width;
+      gctx.fillText(c, x + cw/2, H/2);
+      x += cw + gap;
+    });
+  }
+  gctx.restore();
+}
+
+/* ===== 획 다시 그리기 ===== */
+function redrawStrokes(){
+  const W = drawCanvas.width  / dpr;
+  const H = drawCanvas.height / dpr;
+  dctx.clearRect(0,0,W,H);
+  dctx.save();
+  // 클리핑: 절대로 캔버스 밖으로 못 나감
+  dctx.beginPath(); dctx.rect(0,0,W,H); dctx.clip();
+  dctx.lineCap  = 'round';
+  dctx.lineJoin = 'round';
+  dctx.strokeStyle = '#1d1c1a';
+  strokes.forEach(s=>{
+    if(s.length < 2) return;
+    dctx.beginPath();
+    dctx.moveTo(s[0].x, s[0].y);
+    for(let i=1;i<s.length;i++){
+      dctx.lineWidth = 5 + (s[i].p||0.5)*6;
+      dctx.lineTo(s[i].x, s[i].y);
+      dctx.stroke();
+      dctx.beginPath();
+      dctx.moveTo(s[i].x, s[i].y);
+    }
+  });
+  dctx.restore();
+}
+
+/* ===== 손글씨 사운드 (합성음, 외부 파일 불필요) =====
+   필터링된 화이트노이즈로 붓/펜이 종이에 스치는 "사각사각" 질감을 만듦.
+   펜 이동 중에는 계속 재생, 손을 떼면 즉시 멈춤. */
+let audioCtx = null;
+let noiseSource = null;
+let noiseGain = null;
+let noiseFilter = null;
+let soundReady = false;
+let soundEnabled = true;
+
+function initSound(){
+  if(soundReady) return;
+  try{
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 2초 길이의 화이트노이즈 버퍼를 만들어 반복 재생
+    const bufferSize = audioCtx.sampleRate * 2;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for(let i=0;i<bufferSize;i++) data[i] = Math.random()*2-1;
+
+    noiseSource = audioCtx.createBufferSource();
+    noiseSource.buffer = buffer;
+    noiseSource.loop = true;
+
+    // 밴드패스 필터로 "종이 긁는" 질감의 주파수 대역만 남김
+    noiseFilter = audioCtx.createBiquadFilter();
+    noiseFilter.type = 'bandpass';
+    noiseFilter.frequency.value = 2200;
+    noiseFilter.Q.value = 0.7;
+
+    noiseGain = audioCtx.createGain();
+    noiseGain.gain.value = 0; // 평소엔 무음, 쓸 때만 볼륨 올림
+
+    noiseSource.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    noiseSource.start();
+
+    soundReady = true;
+  }catch(err){
+    soundEnabled = false;
+  }
+}
+
+function soundOn(){
+  if(!soundEnabled) return;
+  if(!soundReady) initSound();
+  if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  if(noiseGain){
+    const now = audioCtx.currentTime;
+    noiseGain.gain.cancelScheduledValues(now);
+    noiseGain.gain.setTargetAtTime(0.05, now, 0.02);
+  }
+}
+function soundUpdate(pressure, speed){
+  if(!soundEnabled || !noiseGain) return;
+  const now = audioCtx.currentTime;
+  // 압력/속도가 클수록 소리도 살짝 커지고 톤도 밝아짐 (자연스러운 사각거림)
+  const vol = 0.035 + Math.min(0.05, speed*0.0006) + (pressure-0.5)*0.02;
+  noiseGain.gain.setTargetAtTime(Math.max(0.02, Math.min(0.12, vol)), now, 0.03);
+  noiseFilter.frequency.setTargetAtTime(1800 + Math.min(1200, speed*8), now, 0.05);
+}
+function soundOff(){
+  if(!soundEnabled || !noiseGain || !audioCtx) return;
+  const now = audioCtx.currentTime;
+  noiseGain.gain.cancelScheduledValues(now);
+  noiseGain.gain.setTargetAtTime(0, now, 0.06);
+}
+
+const soundToggle = document.getElementById('soundToggle');
+soundToggle.addEventListener('click', ()=>{
+  soundEnabled = !soundEnabled;
+  soundToggle.textContent = soundEnabled ? '🔊' : '🔇';
+  if(!soundEnabled) soundOff();
+});
+
+/* ===== 포인터 이벤트: 캔버스 기준 좌표만 허용 ===== */
+function getPos(e){
+  const r = drawCanvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(r.width,  e.clientX - r.left)),
+    y: Math.max(0, Math.min(r.height, e.clientY - r.top)),
+    p: (e.pointerType==='pen' && e.pressure>0) ? e.pressure : 0.5
+  };
+}
+
+drawCanvas.addEventListener('pointerdown', e=>{
+  drawCanvas.setPointerCapture(e.pointerId);
+  drawing  = true;
+  hasDrawn = true;
+  checkBtn.disabled = false;
+  curStroke = [getPos(e)];
+  strokes.push(curStroke);
+  soundOn();
+});
+drawCanvas.addEventListener('pointermove', e=>{
+  if(!drawing) return;
+  const pos = getPos(e);
+  const prev = curStroke[curStroke.length-1];
+  const dx = pos.x-prev.x, dy = pos.y-prev.y;
+  const speed = Math.sqrt(dx*dx+dy*dy);
+  curStroke.push(pos);
+  redrawStrokes();
+  soundUpdate(pos.p, speed);
+});
+function endStroke(){ drawing=false; curStroke=null; soundOff(); }
+drawCanvas.addEventListener('pointerup',     endStroke);
+drawCanvas.addEventListener('pointercancel', endStroke);
+drawCanvas.addEventListener('pointerleave',  endStroke);
+
+/* ===== 정확도 계산 ===== */
+function dilateMask(mask,W,H,r){
+  if(r<=0) return mask;
+  const out=new Uint8Array(mask.length);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    if(mask[y*W+x]){out[y*W+x]=1;continue;}
+    let found=false;
+    for(let dy=-r;dy<=r&&!found;dy++){
+      const ny=y+dy; if(ny<0||ny>=H)continue;
+      for(let dx=-r;dx<=r;dx++){
+        const nx=x+dx; if(nx<0||nx>=W)continue;
+        if(mask[ny*W+nx]){found=true;break;}
+      }
+    }
+    out[y*W+x]=found?1:0;
+  }
+  return out;
+}
+function computeAccuracy(){
+  const FW = guideCanvas.width, FH = guideCanvas.height;
+  const gd = gctx.getImageData(0,0,FW,FH).data;
+  const dd = dctx.getImageData(0,0,FW,FH).data;
+  const W=Math.min(240,FW), sc=FW/W, H=Math.min(240,FH);
+  const T=20;
+  const gm=new Uint8Array(W*H), dm=new Uint8Array(W*H);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const si=(Math.min(FH-1,Math.floor(y*sc))*FW+Math.min(FW-1,Math.floor(x*sc)))*4;
+    gm[y*W+x]=gd[si+3]>T?1:0;
+    dm[y*W+x]=dd[si+3]>T?1:0;
+  }
+  const R=Math.max(2,Math.round(W*0.018));
+  const ge=dilateMask(gm,W,H,R), de=dilateMask(dm,W,H,R);
+  let gc=0,dc=0,ol=0,os=0;
+  for(let i=0;i<W*H;i++){
+    if(gm[i])gc++; if(dm[i])dc++;
+    if(dm[i]&&ge[i])ol++;
+    if(gm[i]&&de[i])os++;
+  }
+  const coverage =gc>0?os/gc:0;
+  const precision=dc>0?ol/dc:0;
+  const iou=(coverage+precision)>0?(2*coverage*precision)/(coverage+precision):0;
+  return {iou, coverage, overflow:1-precision};
+}
+
+/* ===== 버튼 ===== */
+clearBtn.addEventListener('click',()=>{
+  strokes=[]; hasDrawn=false;
+  redrawStrokes();
+  checkBtn.disabled=true;
+  resultPanel.classList.remove('show');
+  stamp.classList.remove('show');
+});
+guideSlider.addEventListener('input', drawGuide);
+checkBtn.addEventListener('click',()=>{
+  if(!hasDrawn) return;
+  const {iou,coverage,overflow}=computeAccuracy();
+  const ip=Math.round(iou*100), cp=Math.round(coverage*100), op=Math.round(overflow*100);
+  document.getElementById('resIoU').textContent     = ip+'%';
+  document.getElementById('resCoverage').textContent = cp+'%';
+  document.getElementById('resOverflow').textContent = op+'%';
+  const comment =
+    ip>=85?'완벽에 가깝습니다. 명필이시네요! 🖋️':
+    ip>=70?'훌륭해요. 선이 안정적이에요.':
+    ip>=50?'좋아요! 가이드를 조금 더 따라가 보세요.':
+    ip>=30?'획의 시작점과 방향을 다시 확인해보세요.':
+          '천천히, 한 획씩 가이드 위로 써보세요.';
+  document.getElementById('resComment').textContent = comment;
+  resultPanel.classList.add('show');
+  document.getElementById('stampPct').innerHTML = ip+'<sup>%</sup>';
+  document.getElementById('stampLabel').textContent = ip>=70?'합격':'연습중';
+  stamp.classList.remove('show');
+  void stamp.offsetWidth;
+  stamp.classList.add('show');
+
+  // 포켓몬 모드 + 정확도 90% 이상 → 도감에 포획!
+  if(mode==='pokemon' && ip>=90){
+    tryCatchPokemon(ip);
+  }
+});
+
+/* ===== 포켓몬 도감 ===== */
+function tryCatchPokemon(score){
+  const item = list[idx];
+  if(!item || !item.sprite) return;
+
+  const prevIdx = dex.findIndex(d=>d.name===item.name);
+  if(prevIdx !== -1 && dex[prevIdx].score >= score) return; // 이미 더 높은 점수로 포획됨
+
+  // 손글씨 스냅샷 캡처 (검은 선 → 먹색 배경 위에 합성해서 보기 좋게)
+  const snap = document.createElement('canvas');
+  snap.width = 200; snap.height = 200;
+  const sctx = snap.getContext('2d');
+  sctx.fillStyle = '#F7F3EA';
+  sctx.fillRect(0,0,200,200);
+  sctx.drawImage(drawCanvas, 0,0,200,200);
+  const writingDataUrl = snap.toDataURL('image/png');
+
+  const entry = { name:item.name, sprite:item.sprite, writing:writingDataUrl, score, ts:Date.now() };
+
+  if(prevIdx !== -1){
+    dex[prevIdx] = entry;
+  } else {
+    dex.unshift(entry);
+  }
+  renderDex();
+  showCatchToast(item.name, score);
+  syncEntryToSheet(entry);
+}
+
+function renderDex(){
+  dexList.innerHTML = '';
+  if(dex.length === 0){
+    dexList.appendChild(dexEmpty);
+    dexEmpty.style.display = 'block';
+    dexToggle.classList.remove('visible');
+    dexBadge.classList.add('hidden');
+    return;
+  }
+  dexEmpty.style.display = 'none';
+  dexToggle.classList.add('visible');
+  dexBadge.classList.remove('hidden');
+  dexBadge.textContent = dex.length;
+
+  dex.forEach(entry=>{
+    const card = document.createElement('div');
+    card.className = 'dex-card';
+    card.innerHTML = `
+      <img src="${entry.sprite}" alt="${entry.name}">
+      <div class="dex-writing"><img src="${entry.writing}" alt="내가 쓴 글씨"></div>
+      <div class="dex-info">
+        <div class="dex-name">${entry.name}</div>
+        <div class="dex-score">정확도 ${entry.score}%</div>
+      </div>
+    `;
+    card.addEventListener('click', ()=> openDexZoom(entry));
+    dexList.appendChild(card);
+  });
+}
+
+/* ===== 도감 카드 확대 보기 ===== */
+const dexZoomOverlay = document.getElementById('dexZoomOverlay');
+const dexZoomClose   = document.getElementById('dexZoomClose');
+const dexZoomSprite  = document.getElementById('dexZoomSprite');
+const dexZoomName    = document.getElementById('dexZoomName');
+const dexZoomScore   = document.getElementById('dexZoomScore');
+const dexZoomWriting = document.getElementById('dexZoomWriting');
+
+function openDexZoom(entry){
+  dexZoomSprite.src = entry.sprite;
+  dexZoomName.textContent = entry.name;
+  dexZoomScore.textContent = `정확도 ${entry.score}%`;
+  dexZoomWriting.src = entry.writing;
+  dexZoomOverlay.classList.add('open');
+}
+function closeDexZoom(){
+  dexZoomOverlay.classList.remove('open');
+}
+dexZoomClose.addEventListener('click', closeDexZoom);
+dexZoomOverlay.addEventListener('click', e=>{
+  if(e.target === dexZoomOverlay) closeDexZoom();
+});
+
+let toastTimer = null;
+function showCatchToast(name, score){
+  catchToastText.textContent = `${name} 포획 성공! (${score}%)`;
+  catchToast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> catchToast.classList.remove('show'), 2200);
+}
+
+dexToggle.addEventListener('click', ()=>{
+  dexPanel.classList.add('open');
+  dexOverlay.classList.add('open');
+});
+function closeDex(){
+  dexPanel.classList.remove('open');
+  dexOverlay.classList.remove('open');
+}
+dexClose.addEventListener('click', closeDex);
+dexOverlay.addEventListener('click', closeDex);
+
+/* ===== 구글 시트 연동 =====
+   Google Apps Script를 "웹 앱"으로 배포한 URL을 등록해두면,
+   포켓몬을 잡을 때마다 자동으로 그 URL에 POST 요청을 보내 시트에 한 줄씩 기록함.
+   (Safari에서 로컬 파일로 열었을 때도 fetch는 외부 URL이라 정상 작동함) */
+let sheetWebhookUrl = '';
+try{ sheetWebhookUrl = localStorage.getItem('mukgil_sheet_url') || ''; }catch(e){}
+
+const sheetModal    = document.getElementById('sheetModal');
+const sheetUrlInput = document.getElementById('sheetUrlInput');
+const sheetStatus   = document.getElementById('sheetStatus');
+const dexSheetBtn   = document.getElementById('dexSheetBtn');
+
+function updateSheetStatus(){
+  if(sheetWebhookUrl){
+    sheetStatus.style.display = 'block';
+    sheetStatus.textContent = '🟢 구글 시트 연동됨 — 포획 시 자동 저장';
+  } else {
+    sheetStatus.style.display = 'none';
+  }
+}
+updateSheetStatus();
+
+dexSheetBtn.addEventListener('click', ()=>{
+  sheetUrlInput.value = sheetWebhookUrl;
+  sheetModal.style.display = 'flex';
+});
+document.getElementById('sheetCancel').addEventListener('click', ()=>{
+  sheetModal.style.display = 'none';
+});
+document.getElementById('sheetSave').addEventListener('click', ()=>{
+  const v = sheetUrlInput.value.trim();
+  sheetWebhookUrl = v;
+  try{ localStorage.setItem('mukgil_sheet_url', v); }catch(e){}
+  updateSheetStatus();
+  sheetModal.style.display = 'none';
+});
+document.getElementById('sheetSyncAll').addEventListener('click', ()=>{
+  if(!sheetWebhookUrl){ alert('먼저 구글 시트 URL을 저장해주세요.'); return; }
+  dex.forEach(entry => syncEntryToSheet(entry));
+  sheetModal.style.display = 'none';
+  catchToastText.textContent = `도감 ${dex.length}개 항목을 시트로 전송했어요`;
+  catchToast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> catchToast.classList.remove('show'), 2200);
+});
+
+function syncEntryToSheet(entry){
+  if(!sheetWebhookUrl) return;
+  // Apps Script 웹앱은 CORS 프리플라이트를 막는 경우가 많아 text/plain + no-cors로 전송
+  // (no-cors라서 응답은 읽을 수 없지만, 시트에는 정상적으로 기록됨)
+  fetch(sheetWebhookUrl, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      name: entry.name,
+      score: entry.score,
+      sprite: entry.sprite,
+      writing: entry.writing, // base64 손글씨 이미지 (data:image/png;base64,...)
+      date: new Date(entry.ts).toISOString()
+    })
+  }).catch(()=>{ /* 네트워크 오류는 조용히 무시 (사용자 경험 방해 안 함) */ });
+}
+
+/* ===== 구글 시트에서 전체 기록 불러오기 =====
+   doGet은 GET 요청이라 CORS 응답 헤더가 있어야 결과를 읽을 수 있음.
+   Apps Script 웹앱(액세스: 모든 사용자)은 기본적으로 이를 허용함. */
+const dexLoadBtn = document.getElementById('dexLoadBtn');
+dexLoadBtn.addEventListener('click', loadFromSheet);
+
+function loadFromSheet(){
+  if(!sheetWebhookUrl){
+    alert('먼저 ⚙️ 버튼에서 구글 시트 URL을 저장해주세요.');
+    return;
+  }
+  dexLoadBtn.textContent = '⏳';
+  fetch(sheetWebhookUrl)
+    .then(r=>r.json())
+    .then(records=>{
+      if(!Array.isArray(records)) throw new Error('bad format');
+      // 시트 기록을 도감 형식으로 변환 (최신순 정렬)
+      const loaded = records.map(r=>({
+        name: r.name,
+        sprite: r.sprite,
+        writing: r.writing, // 구글 드라이브 이미지 URL
+        score: Number(r.score) || 0,
+        ts: r.date ? new Date(r.date).getTime() : Date.now()
+      })).sort((a,b)=> b.ts - a.ts);
+
+      dex = loaded;
+      renderDex();
+      dexLoadBtn.textContent = '☁️';
+      catchToastText.textContent = `전체 기록 ${dex.length}개를 불러왔어요`;
+      catchToast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(()=> catchToast.classList.remove('show'), 2200);
+    })
+    .catch(err=>{
+      dexLoadBtn.textContent = '☁️';
+      alert('기록을 불러오지 못했어요. Apps Script가 doGet을 지원하는 최신 버전으로 배포됐는지 확인해주세요.');
+    });
+}
+
+/* ===== 글자 전환 ===== */
+function applyAspect(text){
+  const len = [...text].length;
+  // 글자가 많을수록 가로로 넓은 직사각형 (padding-top %가 곧 세로/가로 비율)
+  let ratio;
+  if(len <= 1)      ratio = 100;
+  else if(len === 2) ratio = 62;
+  else if(len <= 4)  ratio = 46;
+  else if(len <= 6)  ratio = 34;
+  else                ratio = 26;
+  stageWrap.style.setProperty('--ratio', ratio + '%');
+}
+
+function updateChar(){
+  const item = list[idx];
+  charBig.textContent  = item.ch;
+  charName.textContent = item.name;
+  if(mode==='pokemon'){
+    if(item.sprite){ pokeSprite.src=item.sprite; pokeSpriteBox.style.display='flex'; }
+    else            { pokeSpriteBox.style.display='none'; }
+  } else {
+    pokeSpriteBox.style.display='none';
+  }
+  applyAspect(item.ch);
+  // 글자 바꿀 때 캔버스 초기화
+  strokes=[]; hasDrawn=false; checkBtn.disabled=true;
+  resultPanel.classList.remove('show'); stamp.classList.remove('show');
+  // 비율이 바뀌면 stage 크기도 바뀌므로 다음 프레임에 리사이즈
+  requestAnimationFrame(()=>{
+    resize();
+  });
+}
+
+prevBtn.addEventListener('click',()=>{ idx=(idx-1+list.length)%list.length; updateChar(); });
+nextBtn.addEventListener('click',()=>{ idx=(idx+1)%list.length; updateChar(); });
+
+/* ===== 모드 전환 ===== */
+function setMode(m){
+  if(m==='custom'){ openCustomModal(); return; }
+  mode=m;
+  [...modeBar.children].forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  pokeSpriteBox.style.display='none';
+  pokeStatus.textContent='';
+  if(m==='jamo')     { list=JAMO;     idx=0; updateChar(); }
+  else if(m==='syllable'){ list=SYLLABLE; idx=0; updateChar(); }
+  else if(m==='word')    { list=WORD;     idx=0; updateChar(); }
+  else if(m==='pokemon') { loadPokemon(); }
+}
+modeBar.addEventListener('click',e=>{
+  const b=e.target.closest('.mode-btn'); if(!b) return;
+  setMode(b.dataset.mode);
+});
+
+/* ===== 포켓몬 API ===== */
+async function fetchOne(id){
+  const [pr,sr]=await Promise.all([
+    fetch(`https://pokeapi.co/api/v2/pokemon/${id}`),
+    fetch(`https://pokeapi.co/api/v2/pokemon-species/${id}`)
+  ]);
+  const p=await pr.json(), s=await sr.json();
+  const ko=s.names.find(n=>n.language.name==='ko');
+  const name=ko?ko.name:p.name;
+  const sprite=(p.sprites.other?.['official-artwork']?.front_default)||p.sprites.front_default||'';
+  return {ch:name,name,sprite};
+}
+async function loadPokemon(){
+  if(pokeList){ list=pokeList; idx=0; updateChar(); return; }
+  pokeStatus.textContent='포켓몬 도감 불러오는 중…';
+  list=[{ch:'…',name:'로딩중',sprite:''}]; idx=0; updateChar();
+  try{
+    const first=await Promise.all(POKE_IDS.slice(0,6).map(fetchOne));
+    pokeList=first; list=pokeList; idx=0;
+    pokeStatus.textContent='';
+    updateChar();
+    const rest=await Promise.all(POKE_IDS.slice(6).map(fetchOne));
+    pokeList=[...pokeList,...rest]; list=pokeList;
+  }catch(err){
+    pokeStatus.textContent='포켓몬 정보를 불러오지 못했어요. 네트워크를 확인해주세요.';
+  }
+}
+
+/* ===== 직접입력 모달 ===== */
+function openCustomModal(){
+  customModal.classList.add('open');
+  customInput.value='';
+  setTimeout(()=>customInput.focus(),50);
+}
+document.getElementById('customCancel').addEventListener('click',()=>customModal.classList.remove('open'));
+document.getElementById('customOk').addEventListener('click',()=>{
+  const v=customInput.value.trim(); if(!v) return;
+  customModal.classList.remove('open');
+  mode='custom';
+  [...modeBar.children].forEach(b=>b.classList.toggle('active',b.dataset.mode==='custom'));
+  list=[{ch:v,name:'직접입력'}]; idx=0;
+  pokeSpriteBox.style.display='none';
+  updateChar();
+});
+customInput.addEventListener('keydown',e=>{ if(e.key==='Enter') document.getElementById('customOk').click(); });
+
+/* ===== 리사이즈 감지 ===== */
+const ro = new ResizeObserver(()=>{ resize(); });
+ro.observe(stage);
+
+/* ===== 초기화 ===== */
+// 폰트 로딩 후 첫 그리기
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>{ resize(); });
+} else {
+  setTimeout(()=>{ resize(); }, 200);
+}
+
+})();
+</script>
+</body>
+</html>
